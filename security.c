@@ -84,7 +84,7 @@ static int security_init(void)
     /* Set GPIO direction to output/input */
     sensor_dir = gpio_direction_input(MOTION_SENSOR);
     btn0_dir = gpio_direction_input(BTN0);
-    buzzer_dir = gpio_direction_input(BUZZER);
+    buzzer_dir = gpio_direction_output(BUZZER);
 
     /* set buzzer off */
     gpio_set_value(BUZZER,0);
