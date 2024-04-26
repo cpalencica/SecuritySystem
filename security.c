@@ -10,11 +10,16 @@
 #include <linux/string.h>
 #include <linux/gpio.h>
 #include <linux/interrupt.h>
+#include <linux/delay.h>
+#include <linux/pwm.h>
 
 /* DEFINE PIN VARIABLES */
 #define MOTION_SENSOR 67
 #define BUZZER 68
 #define BTN0 26
+#define PWM_PIN 14
+
+struct pwm_device *pwm; 
 
 /* FUNCTION HEADERS */
 MODULE_LICENSE("Dual BSD/GPL");
@@ -72,9 +77,18 @@ static int security_init(void)
     /* timer init */
     etx_timer = (struct timer_list *) kmalloc(sizeof(struct timer_list), GFP_KERNEL);
 
+    /* pwm init */
+    pwm = pwm_get(NULL, "pwm-2:0"); 
+
+
+    // Set PWM parameters
+    pwm_config(pwm, 2048, 1024); // 500kHz frequency, 50% duty cycle
+ 
+
+
     /* Request all GPIOs */
     sensor_response = gpio_request(MOTION_SENSOR, "sysfs");
-    buzzer_response = gpio_request(BUZZER, "sysfs");
+    //buzzer_response = gpio_request(BUZZER, "sysfs");
     response0 = gpio_request(BTN0, "button");
 
     request0 = request_irq(gpio_to_irq(BTN0), button_handler, IRQF_TRIGGER_FALLING, "button_irq", NULL);
@@ -84,10 +98,10 @@ static int security_init(void)
     /* Set GPIO direction to output/input */
     sensor_dir = gpio_direction_input(MOTION_SENSOR);
     btn0_dir = gpio_direction_input(BTN0);
-    buzzer_dir = gpio_direction_output(BUZZER,0);
+    //buzzer_dir = gpio_direction_output(BUZZER,0);
 
     /* set buzzer off */
-    gpio_set_value(BUZZER,0);
+    //gpio_set_value(BUZZER,0);
 
     timer_setup(etx_timer, timer_callback, 0);
 
@@ -107,10 +121,12 @@ static void security_exit(void)
 	unregister_chrdev(security_major, "security");
     
     /* turn off BUZZER */
-    gpio_set_value(BUZZER, 0);
+    //gpio_set_value(BUZZER, 0);
    
     /* free LEDs, IRQ, and BUTTONs*/
-    gpio_free(BUZZER);
+    //gpio_free(BUZZER);
+    pwm_disable(pwm); 
+    pwm_put(pwm); 
     gpio_free(MOTION_SENSOR);
     free_irq(gpio_to_irq(BTN0), NULL);
     gpio_free(BTN0);
@@ -165,6 +181,8 @@ void timer_callback(struct timer_list * t)
 {
     // turn buzzer off
     gpio_set_value(BUZZER,0);
+    // Enable the PWM output
+    pwm_disable(pwm);
     ACTIVE_TIMERS = 0;
 }
 
@@ -179,10 +197,10 @@ static irqreturn_t sensor_handler(int irq, void *dev_id) {
     // aslong as we are in "read sensor" mode
     if(mode == 0 && ACTIVE_TIMERS == 0) {
         // turn buzzer on for 3 seconds
-        gpio_set_value(BUZZER,1);
+        pwm_enable(pwm);
 
         // call timer to turn off buzzer in 3 seconds
-        mod_timer(etx_timer, jiffies + msecs_to_jiffies( 3000 ));
+        mod_timer(etx_timer, jiffies + msecs_to_jiffies( 6000 ));
         ACTIVE_TIMERS = 1;
     }
 

@@ -1,0 +1,1 @@
+cmd_/ad/eng/users/a/s/askerker/EC535/lab5/home-security/security.ko := arm-linux-gnueabihf-ld -r  -EL -T ./scripts/module-common.lds -T ./arch/arm/kernel/module.lds  --build-id  -o /ad/eng/users/a/s/askerker/EC535/lab5/home-security/security.ko /ad/eng/users/a/s/askerker/EC535/lab5/home-security/security.o /ad/eng/users/a/s/askerker/EC535/lab5/home-security/security.mod.o ;  true
