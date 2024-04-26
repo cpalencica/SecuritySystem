@@ -11,10 +11,23 @@
 #include <linux/gpio.h>
 #include <linux/interrupt.h>
 
+#include <linux/fb.h>
+#include <linux/mutex.h>
+#include <linux/sched.h> // for timers
+#include <linux/ctype.h> // for isdigit
+
+
 /* DEFINE PIN VARIABLES */
 #define MOTION_SENSOR 67
 #define BUZZER 68
 #define BTN0 26
+
+/*Define Colors*/
+#define CYG_FB_DEFAULT_PALETTE_BLUE         0x01
+#define CYG_FB_DEFAULT_PALETTE_RED          0x04
+#define CYG_FB_DEFAULT_PALETTE_WHITE        0x0F
+#define CYG_FB_DEFAULT_PALETTE_LIGHTBLUE    0x09
+#define CYG_FB_DEFAULT_PALETTE_BLACK        0x00
 
 /* FUNCTION HEADERS */
 MODULE_LICENSE("Dual BSD/GPL");
@@ -52,6 +65,25 @@ static char operationalMode[128];
 static char currentStatus[128] = "";
 // static int buffer_len;
 
+// GRAPHICS VARIABLES
+struct fb_info *info;
+struct fb_fillrect *blank;
+
+/* Helper function borrowed from drivers/video/fbdev/core/fbmem.c */
+static struct fb_info *get_fb_info(unsigned int idx)
+{
+    struct fb_info *fb_info;
+
+    if (idx >= FB_MAX)
+        return ERR_PTR(-ENODEV);
+
+    fb_info = registered_fb[idx];
+    if (fb_info)
+        atomic_inc(&fb_info->count);
+
+    return fb_info;
+}
+
 static int security_init(void)
 {
     /* variable init */
@@ -78,7 +110,7 @@ static int security_init(void)
     response0 = gpio_request(BTN0, "button");
 
     request0 = request_irq(gpio_to_irq(BTN0), button_handler, IRQF_TRIGGER_FALLING, "button_irq", NULL);
-    request1 = request_irq(gpio_to_irq(MOTION_SENSOR), sensor_handler, IRQF_TRIGGER_RISING, "sensor_irq", NULL);
+    request1 = request_irq(gpio_to_irq(MOTION_SENSOR), sensor_handler, IRQF_TRIGGER_FALLING, "sensor_irq", NULL);
     
 
     /* Set GPIO direction to output/input */
