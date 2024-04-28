@@ -3,13 +3,15 @@
 #include <linux/kernel.h>          // For printk function
 #include <linux/fs.h>              // For register_chrdev, unregister_chrdev
 #include <linux/slab.h>            // For kmalloc, kfree
-#include <linux/timer.h>            // timer API
-#include <linux/jiffies.h> // For jiffies and msecs_to_jiffies
+#include <linux/timer.h>           // timer API
+#include <linux/jiffies.h>         // For jiffies and msecs_to_jiffies
 #include <linux/uaccess.h>
-#include <asm/uaccess.h> /* copy_from/to_user */
+#include <asm/uaccess.h>           /* copy_from/to_user */
 #include <linux/string.h>
 #include <linux/gpio.h>
 #include <linux/interrupt.h>
+#include <linux/pwm.h>
+#include <linux/types.h>           // Provides the u32 type
 
 /* DEFINE PIN VARIABLES */
 #define MOTION_SENSOR 67
@@ -27,13 +29,16 @@ static void security_exit(void);
 static int security_init(void);
 void prepareOutput(void);
 
+/* PWM VARIABLES */
+struct pwm_device *pwm0 = NULL;
+uint32_t pwm_on_time = 500000000;
+
 /* TIMER VARIABLES */
 static struct timer_list * etx_timer;
 static int ACTIVE_TIMERS = 0;
 
 /* STATE VARIABLES */
 static int mode = 0;    // default mode is to be reading sensor
-
 
 /* SETUP VARIABLES */
 static int security_major = 61;              // major number val
@@ -56,9 +61,10 @@ static int security_init(void)
 {
     /* variable init */
     int result;
-    int request0, request1;
+    int request0, request1, pwm0;
     int sensor_response, buzzer_response, response0;
     int sensor_dir, buzzer_dir, btn0_dir;
+
     
     /* register as a file */
     result = register_chrdev(security_major, "security", &security_fops);
@@ -77,10 +83,22 @@ static int security_init(void)
     buzzer_response = gpio_request(BUZZER, "sysfs");
     response0 = gpio_request(BTN0, "button");
 
+    /* Interrupt Request */
     request0 = request_irq(gpio_to_irq(BTN0), button_handler, IRQF_TRIGGER_FALLING, "button_irq", NULL);
     request1 = request_irq(gpio_to_irq(MOTION_SENSOR), sensor_handler, IRQF_TRIGGER_RISING, "sensor_irq", NULL);
-    
 
+    /* PWM Setup */
+    pwm0 = pwm_request(0, "my_pwm");
+
+    if(pwm0 == NULL) {
+        printk(KERN_INFO "Could not get PWM0");
+        return 0;
+    }
+
+    pwm_config(pwm0, pwm_on_time, 10000000000);
+    pwm_enable(pwm0);
+
+    
     /* Set GPIO direction to output/input */
     sensor_dir = gpio_direction_input(MOTION_SENSOR);
     btn0_dir = gpio_direction_input(BTN0);
@@ -115,7 +133,11 @@ static void security_exit(void)
     free_irq(gpio_to_irq(BTN0), NULL);
     gpio_free(BTN0);
 
-    
+    /* disable & free PWM */
+    pwm_disable(pwm0);
+    pwm_free(pwm0);
+
+
     if (return_buffer)
 	{
         kfree(return_buffer);
