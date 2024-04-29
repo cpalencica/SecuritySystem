@@ -10,7 +10,7 @@
 #include <linux/string.h>
 #include <linux/gpio.h>
 #include <linux/interrupt.h>
-#include <linux/pwm.h>
+#include <linux/pwm.h>  
 #include <linux/types.h>           // Provides the u32 type
 
 /* DEFINE PIN VARIABLES */
