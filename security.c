@@ -12,11 +12,16 @@
 #include <linux/interrupt.h>
 #include <linux/pwm.h>  
 #include <linux/types.h>           // Provides the u32 type
+#include <linux/delay.h>
+#include <linux/kthread.h> // For kernel threads
 
 /* DEFINE PIN VARIABLES */
 #define MOTION_SENSOR 67
 #define BUZZER 68
 #define BTN0 26
+
+/* OTHER DEFINITIONS */
+#define PWM_FREQUENCY 2048 // PWM frequency in Hz
 
 /* FUNCTION HEADERS */
 MODULE_LICENSE("Dual BSD/GPL");
@@ -28,10 +33,8 @@ static irqreturn_t sensor_handler(int irq, void *dev_id);
 static void security_exit(void);
 static int security_init(void);
 void prepareOutput(void);
+static int PWMtoggle(void *data);
 
-/* PWM VARIABLES */
-struct pwm_device *pwm0 = NULL;
-uint32_t pwm_on_time = 500000000;
 
 /* TIMER VARIABLES */
 static struct timer_list * etx_timer;
@@ -39,6 +42,9 @@ static int ACTIVE_TIMERS = 0;
 
 /* STATE VARIABLES */
 static int mode = 0;    // default mode is to be reading sensor
+
+/* THREAD VARIABLES */
+static struct task_struct *thread_task;
 
 /* SETUP VARIABLES */
 static int security_major = 61;              // major number val
@@ -61,7 +67,7 @@ static int security_init(void)
 {
     /* variable init */
     int result;
-    int request0, request1, pwm0;
+    int request0, request1;
     int sensor_response, buzzer_response, response0;
     int sensor_dir, buzzer_dir, btn0_dir;
 
@@ -86,17 +92,6 @@ static int security_init(void)
     /* Interrupt Request */
     request0 = request_irq(gpio_to_irq(BTN0), button_handler, IRQF_TRIGGER_FALLING, "button_irq", NULL);
     request1 = request_irq(gpio_to_irq(MOTION_SENSOR), sensor_handler, IRQF_TRIGGER_RISING, "sensor_irq", NULL);
-
-    /* PWM Setup */
-    pwm0 = pwm_request(0, "my_pwm");
-
-    if(pwm0 == NULL) {
-        printk(KERN_INFO "Could not get PWM0");
-        return 0;
-    }
-
-    pwm_config(pwm0, pwm_on_time, 10000000000);
-    pwm_enable(pwm0);
 
     
     /* Set GPIO direction to output/input */
@@ -132,11 +127,7 @@ static void security_exit(void)
     gpio_free(MOTION_SENSOR);
     free_irq(gpio_to_irq(BTN0), NULL);
     gpio_free(BTN0);
-
-    /* disable & free PWM */
-    pwm_disable(pwm0);
-    pwm_free(pwm0);
-
+ 
 
     if (return_buffer)
 	{
@@ -151,6 +142,10 @@ static void security_exit(void)
 
     if (etx_timer) {
         kfree(etx_timer);
+    }
+
+    if (thread_task) {
+        kthread_stop(thread_task);
     }
 
     printk(KERN_ALERT "Removing security module\n");
@@ -186,8 +181,12 @@ static ssize_t security_read(struct file *filp, char *buf, size_t count, loff_t 
 void timer_callback(struct timer_list * t)
 {
     // turn buzzer off
+    kthread_stop(thread_task);
+
     gpio_set_value(BUZZER,0);
     ACTIVE_TIMERS = 0;
+
+    printk(KERN_INFO "in timer callback\n");
 }
 
 static irqreturn_t button_handler(int irq, void *dev_id) {
@@ -201,11 +200,19 @@ static irqreturn_t sensor_handler(int irq, void *dev_id) {
     // aslong as we are in "read sensor" mode
     if(mode == 0 && ACTIVE_TIMERS == 0) {
         // turn buzzer on for 3 seconds
-        gpio_set_value(BUZZER,1);
+        gpio_set_value(BUZZER,0);
 
         // call timer to turn off buzzer in 3 seconds
-        mod_timer(etx_timer, jiffies + msecs_to_jiffies( 3000 ));
+        mod_timer(etx_timer, jiffies + msecs_to_jiffies( 5000 ));
         ACTIVE_TIMERS = 1;
+
+        // Create a kernel thread
+        thread_task = kthread_run(PWMtoggle, NULL, "my_thread");
+        if (IS_ERR(thread_task)) {
+            printk(KERN_ERR "Failed to create thread\n");
+            return PTR_ERR(thread_task);
+        }
+
     }
 
     return IRQ_HANDLED;
@@ -250,6 +257,22 @@ void prepareOutput(void) {
     strncpy(return_buffer, output_msg, 128);
 }
 
+static int PWMtoggle(void *data) {
+    unsigned int period_us = 1000000 / PWM_FREQUENCY; // Period in microseconds
+    unsigned int half_period_us = period_us / 2; // Half period in microseconds
+
+    while(!kthread_should_stop()) {
+        // Set the GPIO pin high for the high time
+        gpio_set_value(BUZZER, 1);
+        udelay(half_period_us);
+
+        // Set the GPIO pin low for the low time
+        gpio_set_value(BUZZER, 0);
+        udelay(half_period_us);
+    }
+
+    return 0;
+}
 
 module_init(security_init);
 module_exit(security_exit);
