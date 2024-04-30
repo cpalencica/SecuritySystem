@@ -236,7 +236,7 @@ void prepareOutput(void) {
     
     /* set-up current BUZZER / SENSOR status strings */
 
-    if(gpio_get_value(BUZZER) == 1){
+    if(ACTIVE_TIMERS == 1){
         sprintf(buzzer_stat, "on");
     }
     else{
