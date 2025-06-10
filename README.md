@@ -57,8 +57,8 @@ This project implements a simple home security system on a Beaglebone Black usin
 ---
 ## Hardware Setup
 
-> Figure X: Circuit Diagram  
-> ![Circuit Diagram Placeholder](./figures/circuit_diagram.png)
+> Figure 2: Circuit Diagram  
+> ![Circuit Diagram Placeholder](./figures/figure2.png)
 
 This project uses the following hardware components connected as described below:
 
@@ -73,9 +73,9 @@ This project uses the following hardware components connected as described below
 |-----------------|-------------------------|---------------------------------|
 | PIR Sensor VCC  | 5V                      | Power supply                    |
 | PIR Sensor GND  | GND                     | Ground                         |
-| PIR Sensor OUT  | GPIO (e.g., P8_12)      | Interrupt input from sensor    |
-| Pushbutton      | GPIO (e.g., P8_14)      | Input with pull-up/pull-down   |
-| Buzzer          | GPIO (e.g., P8_16)      | PWM output to buzzer           |
+| PIR Sensor OUT  | GPIO                    | Interrupt input from sensor    |
+| Pushbutton      | GPIO                    | Input with pull-up/pull-down   |
+| Buzzer          | GPIO                    | PWM output to buzzer           |
 
 ---
 
