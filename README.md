@@ -118,50 +118,45 @@ buzzer_thread = kthread_run(pwm_thread_function, NULL, ...);
 --- 
 ## PWM Thread
 
-The PWM (Pulse Width Modulation) thread is a key part of the kernel module responsible for generating a PWM signal on a GPIO pin to drive the buzzer. Since the buzzer requires a modulated signal to produce an audible tone, the kernel module creates a dedicated kernel thread that toggles the buzzer GPIO pin on and off at a specified frequency and duty cycle.
+The software PWM thread generates a PWM signal on the buzzer GPIO pin by toggling the pin state at a fixed frequency to create a square wave. This approach simulates hardware PWM using precise timing in software.
 
-### Overview
+### Functionality
 
-- The PWM thread runs continuously while the alarm is active.
-- It toggles the buzzer GPIO pin between HIGH and LOW states with precise timing to simulate a square wave.
-- The thread uses `msleep()` or `usleep_range()` calls to control the HIGH and LOW durations.
-- The frequency and duty cycle parameters control how fast the pin toggles and how long it stays HIGH relative to LOW.
+- The thread continuously toggles the buzzer GPIO pin HIGH and LOW.
+- The duration of the HIGH and LOW states are equal, resulting in a 50% duty cycle square wave.
+- The toggling frequency is controlled by the defined `PWM_FREQUENCY`.
 
-### Thread Workflow
+### Operation Details
 
-1. **Initialization**: When the alarm is triggered (e.g., motion detected and system armed), the kernel module starts the PWM thread.
-2. **Looping**: Inside the thread function, an infinite loop toggles the GPIO pin HIGH and LOW with timing intervals computed from the desired PWM frequency and duty cycle.
-3. **Timing Control**:  
-   - The period `T = 1 / frequency` (e.g., 1/1000 Hz = 1 ms period for 1 kHz).  
-   - HIGH time = `T * duty_cycle` (e.g., 50% duty cycle means HIGH for 0.5 ms).  
-   - LOW time = `T - HIGH_time`.
-4. **GPIO Control**:  
-   - Set GPIO HIGH  
-   - Sleep for HIGH time  
-   - Set GPIO LOW  
-   - Sleep for LOW time
-5. **Termination**: The thread checks a `stop` flag to terminate cleanly when the alarm stops or the module unloads.
+- The period of one full PWM cycle is calculated in microseconds as `1,000,000 / PWM_FREQUENCY`.
+- Since the duty cycle is 50%, the period is divided into two equal halves: `half_period_us`.
+- The GPIO pin is set HIGH for `half_period_us` microseconds, then set LOW for `half_period_us` microseconds.
+- This toggling continues in a loop until the thread is signaled to stop.
 
-### Code Snippet (Pseudo-C):
+### Thread Loop Workflow
+
+1. Calculate the PWM period and half-period based on `PWM_FREQUENCY`.
+2. Set the buzzer GPIO pin HIGH.
+3. Delay for the half-period using `udelay()` to achieve microsecond-level timing.
+4. Set the buzzer GPIO pin LOW.
+5. Delay again for the half-period.
+6. Repeat until `kthread_should_stop()` returns true, signaling thread termination.
+
+### Code Snippet:
 
 ```c
-#define PWM_FREQ_HZ 1000
-#define PWM_DUTY_CYCLE 50 // Percent
+static int PWMtoggle(void *data) {
+    unsigned int period_us = 1000000 / PWM_FREQUENCY; // Period in microseconds
+    unsigned int half_period_us = period_us / 2;      // Half period in microseconds
 
-static int pwm_thread_fn(void *data) {
-    unsigned int period_us = 1000000 / PWM_FREQ_HZ;
-    unsigned int high_time_us = (period_us * PWM_DUTY_CYCLE) / 100;
-    unsigned int low_time_us = period_us - high_time_us;
+    while(!kthread_should_stop()) {
+        gpio_set_value(BUZZER, 1);  // Set buzzer ON
+        udelay(half_period_us);      // Wait half period
 
-    while (!kthread_should_stop()) {
-        gpio_set_value(buzzer_gpio_pin, 1);  // Turn buzzer ON
-        usleep_range(high_time_us, high_time_us + 10);
-
-        gpio_set_value(buzzer_gpio_pin, 0);  // Turn buzzer OFF
-        usleep_range(low_time_us, low_time_us + 10);
+        gpio_set_value(BUZZER, 0);  // Set buzzer OFF
+        udelay(half_period_us);      // Wait half period
     }
 
-    gpio_set_value(buzzer_gpio_pin, 0);  // Ensure buzzer is OFF before exiting
     return 0;
 }
 ```
